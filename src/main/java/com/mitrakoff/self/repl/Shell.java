@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class Shell {
     public static String runBash(String command, Path pwd) throws Exception {
@@ -26,14 +27,14 @@ public class Shell {
         }
 
         // wait for the process to complete gracefully
-        boolean finished = process.waitFor(10, TimeUnit.SECONDS);
+        final boolean finished = process.waitFor(10, TimeUnit.SECONDS);
         if (!finished) {
             process.destroy(); // force terminate if it times out
-            throw new RuntimeException("command timed out");
+            throw new TimeoutException("command timed out");
         }
 
         // check the exit code value
-        int exitValue = process.exitValue();
+        final int exitValue = process.exitValue();
         if (exitValue != 0)
             throw new RuntimeException("exit code: " + exitValue + System.lineSeparator() + output);
 

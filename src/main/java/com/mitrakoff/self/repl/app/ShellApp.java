@@ -1,6 +1,7 @@
 package com.mitrakoff.self.repl.app;
 
 import com.mitrakoff.self.repl.Shell;
+import org.beryx.textio.ReadAbortedException;
 import org.beryx.textio.TerminalProperties;
 import org.beryx.textio.TextIO;
 import org.beryx.textio.TextTerminal;
@@ -35,6 +36,9 @@ public class ShellApp implements BiConsumer<TextIO, RunnerData> {
                 println(Shell.runBash("date", curDir), Color.WHITE, false, false);
                 println(Shell.runBash("uptime", curDir), Color.WHITE, false, false);
                 println(Shell.runBash("whoami", curDir), Color.WHITE, false, false);
+                terminal.registerUserInterruptHandler(t -> {
+                    System.out.println("ABORT");
+                }, false);
             } catch (Exception ignored) {}
         }
 
@@ -55,6 +59,7 @@ public class ShellApp implements BiConsumer<TextIO, RunnerData> {
                     } else throw new RuntimeException("cd: no such file or directory: " + newStr);
                 }
                 else println(Shell.runBash(cmd, curDir), Color.WHITE, false, false);
+            } catch (ReadAbortedException ignored) {
             } catch (Exception e) {
                 println(e.getLocalizedMessage(), Color.RED, true, false);
             }
@@ -64,6 +69,7 @@ public class ShellApp implements BiConsumer<TextIO, RunnerData> {
     }
 
     private void println(String s, Color colour, boolean bold, boolean italic) {
+        if (s == null) return;
         final TerminalProperties<?> props = terminal.getProperties();
 
         props.setPromptColor(colour);
