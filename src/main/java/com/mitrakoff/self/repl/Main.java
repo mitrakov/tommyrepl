@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class Main {
-    public static int port = 8080;
+    public static int port = 8020;
 
     public static void main(String[] args) {
         if (!System.getenv().containsKey("WEB_PASSWORD")) {
