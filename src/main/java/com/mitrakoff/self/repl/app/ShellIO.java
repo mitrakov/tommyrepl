@@ -2,7 +2,6 @@ package com.mitrakoff.self.repl.app;
 
 import org.beryx.textio.TerminalProperties;
 import org.beryx.textio.TextIO;
-import org.beryx.textio.TextIoFactory;
 import org.beryx.textio.TextTerminal;
 import org.beryx.textio.web.RunnerData;
 
@@ -11,7 +10,7 @@ import java.util.function.BiConsumer;
 /**
  * A simple application illustrating the use of TextIO.
  */
-public class ECommerce implements BiConsumer<TextIO, RunnerData> {
+public class ShellIO implements BiConsumer<TextIO, RunnerData> {
     @Override
     public void accept(TextIO textIO, RunnerData runnerData) {
         TextTerminal<?> terminal = textIO.getTextTerminal();

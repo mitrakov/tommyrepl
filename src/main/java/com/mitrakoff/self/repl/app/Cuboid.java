@@ -9,16 +9,9 @@ import java.util.function.BiConsumer;
  * A simple application illustrating the use of TextIO.
  */
 public class Cuboid implements BiConsumer<TextIO, RunnerData> {
-    public static void main(String[] args) {
-        TextIO textIO = TextIoFactory.getTextIO();
-        new Cuboid().accept(textIO, null);
-    }
-
     @Override
     public void accept(TextIO textIO, RunnerData runnerData) {
         TextTerminal<?> terminal = textIO.getTextTerminal();
-        String initData = (runnerData == null) ? null : runnerData.getInitData();
-        AppUtil.printGsonMessage(terminal, initData);
 
         terminal.executeWithPropertiesPrefix("custom.title", t -> t.print("Cuboid dimensions: "));
         terminal.println();

@@ -41,16 +41,9 @@ public class ContactInfo implements BiConsumer<TextIO, RunnerData> {
     private final Contact contact = new Contact();
     private final List<Runnable> operations = new ArrayList<>();
 
-    public static void main(String[] args) {
-        TextIO textIO = TextIoFactory.getTextIO();
-        new ContactInfo().accept(textIO, null);
-    }
-
     @Override
     public void accept(TextIO textIO, RunnerData runnerData) {
         TextTerminal<?> terminal = textIO.getTextTerminal();
-        String initData = (runnerData == null) ? null : runnerData.getInitData();
-        AppUtil.printGsonMessage(terminal, initData);
 
         addTask(textIO, "First name", () -> contact.firstName, s -> contact.firstName = s);
         addTask(textIO, "Last name", () -> contact.lastName, s -> contact.lastName = s);

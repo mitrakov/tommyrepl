@@ -17,17 +17,9 @@ public class Weather implements BiConsumer<TextIO, RunnerData> {
     private boolean useKmh;
     private boolean useMbar;
 
-    public static void main(String[] args) {
-        TextIO textIO = TextIoFactory.getTextIO();
-        new Weather().accept(textIO, null);
-    }
-
     @Override
     public void accept(TextIO textIO, RunnerData runnerData) {
         TextTerminal<?> terminal = textIO.getTextTerminal();
-        String initData = (runnerData == null) ? null : runnerData.getInitData();
-        AppUtil.printGsonMessage(terminal, initData);
-
 
         terminal.setBookmark("COUNTDOWN");
         terminal.println("Seconds to start:");

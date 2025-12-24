@@ -13,17 +13,9 @@ import java.util.stream.Collectors;
  * Illustrates how to use read handlers.
  */
 public class ShoppingList implements BiConsumer<TextIO, RunnerData> {
-
-    public static void main(String[] args) {
-        TextIO textIO = TextIoFactory.getTextIO();
-        new ShoppingList().accept(textIO, null);
-    }
-
     @Override
     public void accept(TextIO textIO, RunnerData runnerData) {
         TextTerminal<?> terminal = textIO.getTextTerminal();
-        String initData = (runnerData == null) ? null : runnerData.getInitData();
-        AppUtil.printGsonMessage(terminal, initData);
 
         String keyStrokeReboot = "ctrl R";
         String keyStrokeAutoValue = "ctrl S";
