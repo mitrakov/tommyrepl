@@ -17,7 +17,6 @@ public class Main {
         final WebTextTerminal term = new WebTextTerminal();
         term.init();
         runWebApp(new SparkTextIoApp(new ShellIO(), term));
-
     }
 
     public static void runWebApp(TextIoApp<?> app) {
@@ -31,7 +30,7 @@ public class Main {
                 .withStaticFilesLocation("public-html")
                 .init();
 
-        final String url = "http://localhost:" + app.getPort() + "/web-demo.html";
+        final String url = "http://localhost:" + app.getPort();
         boolean browserStarted = false;
         if (Desktop.isDesktopSupported()) {
             try {
