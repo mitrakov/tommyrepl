@@ -11,6 +11,7 @@
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
+        <text.io.version>3.4.1</text.io.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -18,22 +19,17 @@
         <dependency>
             <groupId>org.beryx</groupId>
             <artifactId>text-io</artifactId>
-            <version>3.4.1</version>
+            <version>${text.io.version}</version>
         </dependency>
         <dependency>
             <groupId>org.beryx</groupId>
             <artifactId>text-io-web</artifactId>
-            <version>3.4.1</version>
+            <version>${text.io.version}</version>
         </dependency>
         <dependency>
             <groupId>com.sparkjava</groupId>
             <artifactId>spark-core</artifactId>
             <version>2.9.4</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-            <version>2.13.2</version>
         </dependency>
     </dependencies>
 </project>
