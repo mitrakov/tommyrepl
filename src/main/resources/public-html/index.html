@@ -2,11 +2,11 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>WebTextTerminal Demo</title>
+    <title>Tommy REPL</title>
     <link rel="stylesheet" href="textterm/textterm.css">
 </head>
 <body>
-<h1>WebTextTerminal Demo</h1>
+<h1>Tommy REPL</h1>
 
 <div id="textterm" class="textterm-pane">
     <span class="textterm-pair">
@@ -21,7 +21,6 @@
     var textTerm = createTextTerm(document.getElementById("textterm"));
     textTerm.setLogLevelTrace();
     textTerm.onDispose = function(resultData) {
-        console.log("Calling onDispose in web-demo...");
         var message = "You can now close this window.";
         if(resultData) {
             message = resultData + " " + message;
@@ -30,12 +29,11 @@
         textTerm.terminate();
     }
     textTerm.onAbort = function() {
-        console.log("Calling onAbort in web-demo...");
         document.getElementById("app-done").textContent = "Program aborted by the user. You can now close this window.";
         textTerm.terminate();
     }
     textTerm.settings.paneBackgroundColor = "#000022";
-    textTerm.execute("Thanks for using the WebTextTerminal!\n");
+    textTerm.execute("Thanks for using the Tommy REPL!");
 </script>
 
 </body>

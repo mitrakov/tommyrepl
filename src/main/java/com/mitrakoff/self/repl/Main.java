@@ -3,8 +3,8 @@ package com.mitrakoff.self.repl;
 import org.beryx.textio.web.SparkTextIoApp;
 import org.beryx.textio.web.TextIoApp;
 import org.beryx.textio.web.WebTextTerminal;
-import com.mitrakoff.self.repl.app.ShellIO;
-import java.awt.*;
+import com.mitrakoff.self.repl.app.ShellApp;
+import java.awt.Desktop;
 import java.net.URI;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -16,7 +16,7 @@ public class Main {
     public static void main(String[] args) {
         final WebTextTerminal term = new WebTextTerminal();
         term.init();
-        runWebApp(new SparkTextIoApp(new ShellIO(), term));
+        runWebApp(new SparkTextIoApp(new ShellApp(), term));
     }
 
     public static void runWebApp(TextIoApp<?> app) {
