@@ -16,16 +16,33 @@ public class ShellApp implements BiConsumer<TextIO, RunnerData> {
     @Override
     public void accept(TextIO textIO, RunnerData runnerData) {
         terminal = textIO.getTextTerminal();
+        terminal.setBookmark("clear");
         final TerminalProperties<?> props = terminal.getProperties();
         props.setPromptColor(Color.WHITE);
 
         Path curDir = Paths.get(System.getProperty("user.home"));
 
+        final String pwd = textIO.newStringInputReader().withInputMasking(true).read("password: ");
+        if (!pwd.equals(System.getenv("WEB_PASSWORD"))) {
+            println("invalid password", Color.RED, true, true);
+            props.setInputColor(Color.BLACK);
+            return;
+        } else {
+            terminal.resetToBookmark("clear");
+            println("Welcome to Tommy REPL", Color.WHITE, false, false);
+            try {
+                println(Shell.runBash("uname -a", curDir), Color.WHITE, false, false);
+                println(Shell.runBash("date", curDir), Color.WHITE, false, false);
+                println(Shell.runBash("uptime", curDir), Color.WHITE, false, false);
+                println(Shell.runBash("whoami", curDir), Color.WHITE, false, false);
+            } catch (Exception ignored) {}
+        }
+
         while (true) {
             try {
-                final String cmd = textIO.newStringInputReader().read("> ").trim();
-                if (cmd.equals("exit") || cmd.equals("quit")) break;
-                if (cmd.equals("cd")) {
+                final String cmd = textIO.newStringInputReader().withMinLength(0).read("> ").trim();
+                if (cmd.equals("stop")) break;
+                else if (cmd.equals("cd")) {
                     curDir = Paths.get(System.getProperty("user.home"));
                     println(curDir.toString(), Color.CYAN, false, true);
                 }
@@ -43,7 +60,7 @@ public class ShellApp implements BiConsumer<TextIO, RunnerData> {
             }
         }
 
-        textIO.dispose("Good bye!");
+        textIO.dispose("Server stopped.");
     }
 
     private void println(String s, Color colour, boolean bold, boolean italic) {

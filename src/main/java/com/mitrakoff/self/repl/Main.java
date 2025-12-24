@@ -14,6 +14,10 @@ public class Main {
     public static int port = 8080;
 
     public static void main(String[] args) {
+        if (!System.getenv().containsKey("WEB_PASSWORD")) {
+            System.err.println("Provide WEB_PASSWORD env variable");
+            System.exit(1);
+        }
         final WebTextTerminal term = new WebTextTerminal();
         term.init();
         runWebApp(new SparkTextIoApp(new ShellApp(), term));
