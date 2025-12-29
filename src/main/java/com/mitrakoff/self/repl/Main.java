@@ -3,7 +3,6 @@ package com.mitrakoff.self.repl;
 import org.beryx.textio.web.SparkTextIoApp;
 import org.beryx.textio.web.TextIoApp;
 import org.beryx.textio.web.WebTextTerminal;
-import com.mitrakoff.self.repl.app.ShellApp;
 import java.awt.Desktop;
 import java.net.URI;
 import java.util.concurrent.Executors;
@@ -20,7 +19,7 @@ public class Main {
         }
         final WebTextTerminal term = new WebTextTerminal();
         term.init();
-        runWebApp(new SparkTextIoApp(new ShellApp(), term));
+        runWebApp(new SparkTextIoApp((t, d) -> new WebTabHandler(t).run(), term));
     }
 
     public static void runWebApp(TextIoApp<?> app) {
