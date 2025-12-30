@@ -13,7 +13,7 @@ public class WebTabHandler {
     private final TextIO textIO;
     private final WebTextTerminal term;
     private final ExecutorService slave = Executors.newSingleThreadExecutor();
-    private final StringBuffer buffer = new StringBuffer();
+    private final LinkedTransferQueue<String> buffer = new LinkedTransferQueue<>();
 
     private Future<?> task;
     private Process process;
@@ -26,10 +26,7 @@ public class WebTabHandler {
         term.getProperties().setPromptColor(Color.WHITE);
         term.registerUserInterruptHandler(t -> {
             System.out.println("CTRL+C");
-            if (task != null)
-                task.cancel(true);
-            if (process != null)
-                process.destroy();
+            interrupt();
             printError("Task cancelled.");
         }, true);
     }
@@ -45,38 +42,31 @@ public class WebTabHandler {
             printLineCyan("Welcome to Tommy REPL!\n");
             task = slave.submit(() -> {
                 try {
-                    runBash("date", curDir);
-                    runBash("uname -a", curDir);
-                    runBash("whoami", curDir);
-                } catch (Exception e) {
-                    printError(e.getMessage());
-                }
+                    runBash("date && uname -a && whoami", curDir);
+                } catch (Exception e) { printError(e.getMessage()); }
             });
         }
 
         while (true) {
-            // here we replace "\u00A0" (&nbsp;) with a just space
+            // since browsers use "\u00A0" (&nbsp;) instead of a space, we need to replace them before .trim()
             final String cmd = textIO.newStringInputReader().withMinLength(0).read().replace("\u00A0", " ").trim();
-            if (task != null) {
-                if (task.isDone()) {
-                    task = null;
-                    buffer.setLength(0);   // TODO here possibly bug on non-empty buffer; try "ls -la"
-                } else {
-                    printLine(buffer.toString());
-                    buffer.setLength(0);
-                    continue;
+            for (int i=0; i<128 && !buffer.isEmpty(); i++) {    // i<128 is a guard for infinite commands like "top"
+                String s;
+                if ((s = buffer.poll()) != null) {
+                    if (s.equals("🜐")) print("> "); else printLine(s);
                 }
             }
             if (cmd.isEmpty()) continue;
             if (cmd.equals("exit") || cmd.equals("quit")) break;
             else if (cmd.equals("shutdown")) {
+                interrupt();
                 slave.shutdown();
                 textIO.dispose("Server killed. Forever.");
             } else if (cmd.equals("cd")) {
                 curDir = Paths.get(System.getProperty("user.home"));
                 printLineCyan(curDir.toString());
             }
-            else if (cmd.startsWith("cd")) {
+            else if (cmd.startsWith("cd ")) {
                 final String newStr = cmd.substring(3).trim();
                 final Path newPath = curDir.resolve(newStr).normalize().toAbsolutePath();
                 if (newPath.toFile().exists()) {
@@ -84,24 +74,26 @@ public class WebTabHandler {
                     printLineCyan(curDir.toString());
                 } else printError("cd: no such file or directory: " + newStr);
             }
-            else {
+            else { // usual Bash command
                 task = slave.submit(() -> {
                     try {
                         runBash(cmd, curDir);
-                    } catch (Exception e) {
-                        printError(e.getMessage());
-                    }
+                    } catch (Exception e) { printError(e.getMessage()); }
                 });
             }
         }
 
+        interrupt();
+        slave.shutdown();
         printLineCyan("Your session is over. Good bye...");
         term.getProperties().setInputColor(Color.BLACK);
     }
 
     private void runBash(String command, Path pwd) throws Exception {
         // process builder setup
-        final ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
+        final ProcessBuilder pb = System.getProperty("os.name").toLowerCase().contains("win")
+            ? new ProcessBuilder("cmd.exe", "/c", command)
+            : new ProcessBuilder("bash", "-c", command);
         pb.redirectErrorStream(true);   // redirect error stream to standard output stream for single stream reading
         if (pwd != null)
             pb.directory(pwd.toFile()); // set up working directory for "cd" commands
@@ -111,8 +103,8 @@ public class WebTabHandler {
         try (final BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                buffer.append(line).append(System.lineSeparator());
-                term.postUserInput("");
+                buffer.put(line);
+                term.postUserInput(""); // signal to main UI thread to interrupt textIO.read()
             }
         }
 
@@ -126,9 +118,27 @@ public class WebTabHandler {
         // check the exit code value
         final int exitValue = process.exitValue();
         if (exitValue != 0) {
-            buffer.append("Exit code: ").append(exitValue);
+            buffer.put("Exit code: " + exitValue);
             term.postUserInput("");
         }
+
+        // hack: print welcome ">"
+        buffer.put(System.lineSeparator());
+        buffer.put("🜐");
+        term.postUserInput("");
+    }
+
+    private void interrupt() {
+        if (process != null)
+            process.destroy();
+        if (task != null)
+            task.cancel(true);
+        buffer.clear();
+    }
+
+    private synchronized void print(String s) {
+        term.executeWithPropertiesConfigurator(
+                p -> p.setPromptColor(Color.YELLOW), (term) -> term.print(s));
     }
 
     private synchronized void printLine(String s) {
