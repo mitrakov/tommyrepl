@@ -1,6 +1,6 @@
 package com.mitrakoff.self.repl;
 
-import org.beryx.textio.TextIO;
+import org.beryx.textio.*;
 import org.beryx.textio.web.WebTextTerminal;
 import java.awt.Color;
 import java.io.BufferedReader;
@@ -25,6 +25,11 @@ public class WebTabHandler {
         term = (WebTextTerminal) textIO.getTextTerminal();
         term.setBookmark("clear");
         term.getProperties().setPromptColor(Color.WHITE);
+        term.registerHandler("ctrl L", t -> {
+            t.resetToBookmark("clear");
+            print(">");
+            return new ReadHandlerData(ReadInterruptionStrategy.Action.CONTINUE);
+        });
         term.registerUserInterruptHandler(t -> {
             System.out.println("CTRL+C");
             interrupt();
@@ -55,7 +60,9 @@ public class WebTabHandler {
                 for (int i=0; i<128 && !buffer.isEmpty(); i++) {    // i<128 is a guard for infinite commands like "top"
                     String s;
                     if ((s = buffer.poll()) != null) {
-                        if (s.equals("🜐")) print("> "); else printLine(s);
+                        if (s.equals("🜐")) print(">");
+                        else if (s.startsWith("Exit code: ")) printError(s);
+                        else printLine(s);
                     }
                 }
             }
@@ -68,7 +75,7 @@ public class WebTabHandler {
             } else if (cmd.equals("cd")) {
                 curDir = Paths.get(System.getProperty("user.home"));
                 printLineCyan(curDir.toString());
-                print("> ");
+                print(">");
             }
             else if (cmd.startsWith("cd ")) {
                 final String newStr = cmd.substring(3).trim();
@@ -76,7 +83,7 @@ public class WebTabHandler {
                 if (newPath.toFile().exists()) {
                     curDir = newPath;
                     printLineCyan(curDir.toString());
-                    print("> ");
+                    print(">");
                 } else printError("cd: no such file or directory: " + newStr);
             }
             else { // usual Bash command
