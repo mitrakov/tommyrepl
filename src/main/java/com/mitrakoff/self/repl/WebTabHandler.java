@@ -7,6 +7,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.concurrent.*;
 
 public class WebTabHandler {
@@ -42,12 +43,14 @@ public class WebTabHandler {
     public void run() {
         final String password = textIO.newStringInputReader().withInputMasking(true).read("password: ");
         if (!password.equals(System.getenv("WEB_PASSWORD"))) {
+            System.out.println(LocalDateTime.now() + ": invalid password detected");
             printError("Invalid password");
             term.getProperties().setInputColor(Color.BLACK);
             return;
         } else {
             term.resetToBookmark("clear");
-            printLineCyan("Welcome to Tommy REPL!\n - use CTRL+C to interrupt current command\n - use CTRL+L to clear console");
+            printLineCyan("Welcome to Tommy REPL (v1.0.0)");
+            printLineCyan(" - use CTRL+C to interrupt current command\n - use CTRL+L to clear console");
             printLineCyan(" - run \"exit\" to close the session\n - run \"shutdown\" to stop the server");
             task = slave.submit(() -> {
                 try {
@@ -106,6 +109,7 @@ public class WebTabHandler {
     }
 
     private void runBash(String command, Path pwd) throws Exception {
+        // this method is being run asynchronously. DO NOT print to WebTerminal here, print to "buffer" instead
         // process builder setup
         final ProcessBuilder pb = isWindows
             ? new ProcessBuilder("cmd.exe", "/c", command)
@@ -138,7 +142,7 @@ public class WebTabHandler {
             term.postUserInput("");
         }
 
-        // hack: print welcome ">"
+        // lifehack: print welcome message ">" into the end of the buffer (due to async nature of the app)
         buffer.put("🜐");
         term.postUserInput("");
     }
