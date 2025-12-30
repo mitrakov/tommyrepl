@@ -11,6 +11,8 @@ import java.util.concurrent.*;
 
 public class WebTabHandler {
     public static final String NBSP = "\u00A0"; // browsers use non-breaking space (&nbsp;) instead of a usual space
+    public static boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+
     private final TextIO textIO;
     private final WebTextTerminal term;
     private final ExecutorService slave = Executors.newSingleThreadExecutor();
@@ -45,10 +47,11 @@ public class WebTabHandler {
             return;
         } else {
             term.resetToBookmark("clear");
-            printLineCyan("Welcome to Tommy REPL!\n - Use CTRL+C to interrupt current command\n - Use CTRL+L to clear console");
+            printLineCyan("Welcome to Tommy REPL!\n - use CTRL+C to interrupt current command\n - use CTRL+L to clear console");
+            printLineCyan(" - run \"exit\" to close the session\n - run \"shutdown\" to stop the server");
             task = slave.submit(() -> {
                 try {
-                    runBash("date && uname -a && whoami", curDir);
+                    runBash(isWindows ? "date /t && ver && whoami" : "date && uname -a && whoami", curDir);
                 } catch (Exception e) { printError(e.getMessage()); }
             });
         }
@@ -72,12 +75,14 @@ public class WebTabHandler {
                 interrupt();
                 slave.shutdown();
                 textIO.dispose("Server killed. Forever.");
+            } else if (cmd.equals("clear") || cmd.equals("cls")) {
+                term.resetToBookmark("clear");
+                print(">");
             } else if (cmd.equals("cd")) {
                 curDir = Paths.get(System.getProperty("user.home"));
                 printLineCyan(curDir.toString());
                 print(">");
-            }
-            else if (cmd.startsWith("cd ")) {
+            } else if (cmd.startsWith("cd ")) {
                 final String newStr = cmd.substring(3).trim();
                 final Path newPath = curDir.resolve(newStr).normalize().toAbsolutePath();
                 if (newPath.toFile().exists()) {
@@ -85,8 +90,7 @@ public class WebTabHandler {
                     printLineCyan(curDir.toString());
                     print(">");
                 } else printError("cd: no such file or directory: " + newStr);
-            }
-            else { // usual Bash command
+            } else { // usual Bash command
                 task = slave.submit(() -> {
                     try {
                         runBash(cmd, curDir);
@@ -97,13 +101,13 @@ public class WebTabHandler {
 
         interrupt();
         slave.shutdown();
-        printLineCyan("Your session is over. Good bye...");
+        printError("Your session is over. Good bye...");
         term.getProperties().setInputColor(Color.BLACK);
     }
 
     private void runBash(String command, Path pwd) throws Exception {
         // process builder setup
-        final ProcessBuilder pb = System.getProperty("os.name").toLowerCase().contains("win")
+        final ProcessBuilder pb = isWindows
             ? new ProcessBuilder("cmd.exe", "/c", command)
             : new ProcessBuilder("bash", "-c", command);
         pb.redirectErrorStream(true);   // redirect error stream to standard output stream for single stream reading
