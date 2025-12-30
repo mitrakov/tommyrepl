@@ -48,6 +48,7 @@ public class WebTabHandler {
             term.getProperties().setInputColor(Color.BLACK);
             return;
         } else {
+            System.out.println(LocalDateTime.now() + ": successful login");
             term.resetToBookmark("clear");
             printLineCyan("Welcome to Tommy REPL (v1.0.0)");
             printLineCyan(" - use CTRL+C to interrupt current command\n - use CTRL+L to clear console");
