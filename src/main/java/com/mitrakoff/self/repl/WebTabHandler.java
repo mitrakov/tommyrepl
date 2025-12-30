@@ -40,12 +40,12 @@ public class WebTabHandler {
     public void run() {
         final String password = textIO.newStringInputReader().withInputMasking(true).read("password: ");
         if (!password.equals(System.getenv("WEB_PASSWORD"))) {
-            printError("invalid password");
+            printError("Invalid password");
             term.getProperties().setInputColor(Color.BLACK);
             return;
         } else {
             term.resetToBookmark("clear");
-            printLineCyan("Welcome to Tommy REPL!\n");
+            printLineCyan("Welcome to Tommy REPL!\n - Use CTRL+C to interrupt current command\n - Use CTRL+L to clear console");
             task = slave.submit(() -> {
                 try {
                     runBash("date && uname -a && whoami", curDir);
@@ -124,7 +124,7 @@ public class WebTabHandler {
         final boolean finished = process.waitFor(5, TimeUnit.SECONDS);
         if (!finished) {
             process.destroy(); // force terminate if it times out
-            throw new TimeoutException("command timed out");
+            throw new TimeoutException("Command timed out");
         }
 
         // check the exit code value
