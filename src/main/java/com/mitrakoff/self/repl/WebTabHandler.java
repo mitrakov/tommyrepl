@@ -10,6 +10,7 @@ import java.nio.file.Paths;
 import java.util.concurrent.*;
 
 public class WebTabHandler {
+    public static final String NBSP = "\u00A0"; // browsers use non-breaking space (&nbsp;) instead of a usual space
     private final TextIO textIO;
     private final WebTextTerminal term;
     private final ExecutorService slave = Executors.newSingleThreadExecutor();
@@ -48,12 +49,14 @@ public class WebTabHandler {
         }
 
         while (true) {
-            // since browsers use "\u00A0" (&nbsp;) instead of a space, we need to replace them before .trim()
-            final String cmd = textIO.newStringInputReader().withMinLength(0).read().replace("\u00A0", " ").trim();
-            for (int i=0; i<128 && !buffer.isEmpty(); i++) {    // i<128 is a guard for infinite commands like "top"
-                String s;
-                if ((s = buffer.poll()) != null) {
-                    if (s.equals("🜐")) print("> "); else printLine(s);
+            final String cmd = textIO.newStringInputReader().withMinLength(0).read().replace(NBSP, " ").trim();
+            if (!buffer.isEmpty()) {
+                printLine("");
+                for (int i=0; i<128 && !buffer.isEmpty(); i++) {    // i<128 is a guard for infinite commands like "top"
+                    String s;
+                    if ((s = buffer.poll()) != null) {
+                        if (s.equals("🜐")) print("> "); else printLine(s);
+                    }
                 }
             }
             if (cmd.isEmpty()) continue;
@@ -65,6 +68,7 @@ public class WebTabHandler {
             } else if (cmd.equals("cd")) {
                 curDir = Paths.get(System.getProperty("user.home"));
                 printLineCyan(curDir.toString());
+                print("> ");
             }
             else if (cmd.startsWith("cd ")) {
                 final String newStr = cmd.substring(3).trim();
@@ -72,6 +76,7 @@ public class WebTabHandler {
                 if (newPath.toFile().exists()) {
                     curDir = newPath;
                     printLineCyan(curDir.toString());
+                    print("> ");
                 } else printError("cd: no such file or directory: " + newStr);
             }
             else { // usual Bash command
@@ -123,7 +128,6 @@ public class WebTabHandler {
         }
 
         // hack: print welcome ">"
-        buffer.put(System.lineSeparator());
         buffer.put("🜐");
         term.postUserInput("");
     }
@@ -137,26 +141,34 @@ public class WebTabHandler {
     }
 
     private synchronized void print(String s) {
+        if (s == null) return;
+        final String t = s.replace(" ", NBSP);
         term.executeWithPropertiesConfigurator(
-                p -> p.setPromptColor(Color.YELLOW), (term) -> term.print(s));
+                p -> p.setPromptColor(Color.YELLOW), (term) -> term.print(t));
     }
 
     private synchronized void printLine(String s) {
+        if (s == null) return;
+        final String t = s.replace(" ", NBSP);
         term.executeWithPropertiesConfigurator(
-                p -> p.setPromptColor(Color.WHITE), (term) -> term.println(s));
+                p -> p.setPromptColor(Color.WHITE), (term) -> term.println(t));
     }
 
     private synchronized void printLineCyan(String s) {
+        if (s == null) return;
+        final String t = s.replace(" ", NBSP);
         term.executeWithPropertiesConfigurator(p -> {
             p.setPromptColor(Color.CYAN);
             p.setPromptBold(false);
-        }, (term) -> term.println(s));
+        }, (term) -> term.println(t));
     }
 
     private synchronized void printError(String s) {
+        if (s == null) return;
+        final String t = s.replace(" ", NBSP);
         term.executeWithPropertiesConfigurator(p -> {
             p.setPromptColor(Color.RED);
             p.setPromptBold(true);
-        }, (term) -> term.println(s));
+        }, (term) -> term.println(t));
     }
 }
