@@ -3,8 +3,7 @@ package com.mitrakoff.self.repl;
 import org.beryx.textio.*;
 import org.beryx.textio.web.WebTextTerminal;
 import java.awt.Color;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.nio.file.*;
 import java.time.LocalDateTime;
@@ -12,18 +11,20 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 // mvn package
+// WEB_PASSWORD=1234 java -jar tommyrepl-1.0.0.jar 8080 &
 public class WebTabHandler {
     public static final String NBSP = "\u00A0"; // browsers use non-breaking space (&nbsp;) instead of a usual space
     public static boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
-    private final TextIO textIO;
-    private final WebTextTerminal term;
-    private final ExecutorService slave = Executors.newSingleThreadExecutor();
-    private final LinkedTransferQueue<String> buffer = new LinkedTransferQueue<>();
+    private final TextIO textIO;                                                     // ref to textIO
+    private final WebTextTerminal term;                                              // ref to terminal instance
+    private final ExecutorService slave = Executors.newSingleThreadExecutor();       // bash executor, runs async
+    private final LinkedTransferQueue<String> buffer = new LinkedTransferQueue<>();  // stdout/stderr from slave
 
-    private Future<?> task;
-    private Process process;
-    private Path curDir = Paths.get(System.getProperty("user.home"));
+    private Future<?> task;                            // bash command task (to implement "CTRL+C")
+    private Process process;                           // bash command internal OS process
+    private BufferedWriter bWriter;                    // buffered writer for subcommands like spark-shell, scala, etc.
+    private Path curDir = Paths.get(System.getProperty("user.home"));    // current working directory, for "cd"
 
     public WebTabHandler(TextIO textIO) {
         this.textIO = textIO;
@@ -32,11 +33,11 @@ public class WebTabHandler {
         term.getProperties().setPromptColor(Color.WHITE);
         term.registerHandler("ctrl L", t -> {
             t.resetToBookmark("clear");
-            print(">");
+            printCaret();
             return new ReadHandlerData(ReadInterruptionStrategy.Action.CONTINUE);
         });
         term.registerUserInterruptHandler(t -> {
-            System.out.println("CTRL+C");
+            log("CTRL+C");
             interrupt();
             printError("Task cancelled.");
         }, true);
@@ -45,12 +46,12 @@ public class WebTabHandler {
     public void run() {
         final String password = textIO.newStringInputReader().withInputMasking(true).read("password: ");
         if (!password.equals(System.getenv("WEB_PASSWORD"))) {
-            System.out.println(LocalDateTime.now() + ": invalid password detected");
+            log("Invalid password detected");
             printError("Invalid password");
             term.getProperties().setInputColor(Color.BLACK);
             return;
         } else {
-            System.out.println(LocalDateTime.now() + ": successful login");
+            log("Successful login");
             term.resetToBookmark("clear");
             printLine("Welcome to Tommy REPL (v1.0.0)", Color.GREEN);
             printLine(" - use CTRL+C to interrupt current command\n - use CTRL+L to clear console", Color.CYAN);
@@ -62,7 +63,7 @@ public class WebTabHandler {
             });
         }
 
-        while (true) {
+        while (true) try {
             // .read() is the only way in TextIO to handle "CTRL+C" (and other interrupt handlers), that's why all bash commands
             // must be run in a separate thread and push output to a shared buffer (instead of direct writing to terminal)
             final String cmd = textIO.newStringInputReader().withMinLength(0).read().replace(NBSP, " ").trim();
@@ -72,14 +73,18 @@ public class WebTabHandler {
                 for (int i=0; i<128 && !buffer.isEmpty(); i++) {    // i<128 is a guard for infinite commands like "top"
                     String s;
                     if ((s = buffer.poll()) != null) {
-                        if (s.equals("🜐")) print(">");
+                        if (s.equals("🜐")) printCaret();
                         else if (s.startsWith("Exit code: ")) printError(s);
-                        else printLine(s);
+                        else printLine(s.replaceAll("\u001B\\[[;\\d]*[ -/]*[@-~]", "")); // rm ESC characters
                     }
                 }
             }
             if (cmd.isEmpty()) continue;
-            if (cmd.equals("exit") || cmd.equals("quit")) break;
+            if (bWriter != null) {      // handle subprocess, e.g. spark-shell, psql, redis-cli, scala, etc.
+                bWriter.write(cmd + System.lineSeparator());
+                bWriter.flush();
+            }
+            else if (cmd.equals("exit") || cmd.equals("quit")) break;
             else if (cmd.equals("shutdown")) {
                 interrupt();
                 slave.shutdown();
@@ -87,44 +92,45 @@ public class WebTabHandler {
                 textIO.dispose("Web server shut down...");
             } else if (cmd.equals("clear") || cmd.equals("cls")) {
                 term.resetToBookmark("clear");
-                print(">");
+                printCaret();
             } else if (cmd.equals("cd")) {
                 curDir = Paths.get(System.getProperty("user.home"));
                 printLine(curDir.toString(), Color.CYAN);
-                print(">");
+                printCaret();
             } else if (cmd.startsWith("cd ")) {
                 final String newStr = cmd.substring(3).trim();
                 final Path newPath = curDir.resolve(newStr).normalize().toAbsolutePath();
                 if (newPath.toFile().exists()) {
                     curDir = newPath;
                     printLine(curDir.toString(), Color.CYAN);
-                    print(">");
+                    printCaret();
                 } else printError("cd: no such file or directory: " + newStr);
             } else if (cmd.equals("env")) {
                 System.getenv().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach((e) ->
                         printLine(e.getKey() + "=" + (e.getKey().equals("WEB_PASSWORD") ? "••••••••••" : e.getValue())));
-                print(">");
+                printCaret();
             } else if (cmd.startsWith("export ")) {
                 final String newStr = cmd.substring(7).trim();
                 if (!newStr.contains("=")) {
                     printError("Format: export VAR=VALUE");
-                    print(">");
+                    printCaret();
                 } else {
                     final String[] arr = newStr.split("=");
                     final String key = arr[0];
                     final String value = arr[1];
                     updateEnv(key, value);
                     printLine("Variable set: " + key + "=" + value, Color.CYAN);
-                    print(">");
+                    printCaret();
                 }
             } else { // usual Bash command
+                log(cmd);
                 task = slave.submit(() -> {
                     try {
                         runBash(cmd, curDir);
                     } catch (Exception e) { printError(e.getMessage()); }
                 });
             }
-        }
+        } catch (Exception e) { printError(e.getMessage()); }
 
         interrupt();
         slave.shutdown();
@@ -146,19 +152,21 @@ public class WebTabHandler {
 
         // start process
         process = pb.start();
-        try (final BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+        try (final BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+             final BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()))) {
+            bWriter = writer;
             String line;
             while ((line = reader.readLine()) != null) {
                 buffer.put(line);
                 term.postUserInput(""); // signal to main UI thread to interrupt textIO.read()
             }
+            bWriter = null;
         }
 
         // wait for the process to complete gracefully
         final boolean finished = process.waitFor(5, TimeUnit.SECONDS);
         if (!finished) {
             process.destroy(); // force terminate if it times out
-            throw new TimeoutException("Command timed out");
         }
 
         // check the exit code value
@@ -178,6 +186,11 @@ public class WebTabHandler {
             process.destroy();
         if (task != null)
             task.cancel(true);
+        if (bWriter != null) try {
+            bWriter.close();
+            bWriter = null;
+        } catch (IOException e) { printError(e.getMessage()); }
+
         buffer.clear();
     }
 
@@ -191,18 +204,18 @@ public class WebTabHandler {
         } catch (IllegalAccessException | NoSuchFieldException e) { printError(e.getMessage()); }
     }
 
-    private synchronized void print(String s) {
-        if (s == null) return;
-        final String t = s.replace(" ", NBSP);
+    private void log(String s) {
+        System.out.println(LocalDateTime.now() + ": " + s);
+    }
+
+    private synchronized void printCaret() {
+        final String t = System.lineSeparator() + ">";
         term.executeWithPropertiesConfigurator(
                 p -> p.setPromptColor(Color.YELLOW), (term) -> term.print(t));
     }
 
     private synchronized void printLine(String s) {
-        if (s == null) return;
-        final String t = s.replace(" ", NBSP);
-        term.executeWithPropertiesConfigurator(
-                p -> p.setPromptColor(Color.WHITE), (term) -> term.println(t));
+        printLine(s, Color.WHITE);
     }
 
     private synchronized void printLine(String s, Color colour) {
@@ -210,7 +223,6 @@ public class WebTabHandler {
         final String t = s.replace(" ", NBSP);
         term.executeWithPropertiesConfigurator(p -> {
             p.setPromptColor(colour);
-            p.setPromptBold(false);
         }, (term) -> term.println(t));
     }
 
