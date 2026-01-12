@@ -5,11 +5,13 @@ import org.beryx.textio.web.WebTextTerminal;
 import java.awt.Color;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.lang.reflect.Field;
+import java.nio.file.*;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.concurrent.*;
 
+// mvn package
 public class WebTabHandler {
     public static final String NBSP = "\u00A0"; // browsers use non-breaking space (&nbsp;) instead of a usual space
     public static boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -50,9 +52,9 @@ public class WebTabHandler {
         } else {
             System.out.println(LocalDateTime.now() + ": successful login");
             term.resetToBookmark("clear");
-            printLineCyan("Welcome to Tommy REPL (v1.0.0)");
-            printLineCyan(" - use CTRL+C to interrupt current command\n - use CTRL+L to clear console");
-            printLineCyan(" - run \"exit\" to close the session\n - run \"shutdown\" to stop the server");
+            printLine("Welcome to Tommy REPL (v1.0.0)", Color.GREEN);
+            printLine(" - use CTRL+C to interrupt current command\n - use CTRL+L to clear console", Color.CYAN);
+            printLine(" - run \"exit\" to close the session\n - run \"shutdown\" to stop the server", Color.CYAN);
             task = slave.submit(() -> {
                 try {
                     runBash(isWindows ? "date /t && ver && whoami" : "date && uname -a && whoami", curDir);
@@ -61,7 +63,10 @@ public class WebTabHandler {
         }
 
         while (true) {
+            // .read() is the only way in TextIO to handle "CTRL+C" (and other interrupt handlers), that's why all bash commands
+            // must be run in a separate thread and push output to a shared buffer (instead of direct writing to terminal)
             final String cmd = textIO.newStringInputReader().withMinLength(0).read().replace(NBSP, " ").trim();
+            // first, we have to print messages from the buffer filled by bash executor (again it is made only for "CTRL+C" feature)
             if (!buffer.isEmpty()) {
                 printLine("");
                 for (int i=0; i<128 && !buffer.isEmpty(); i++) {    // i<128 is a guard for infinite commands like "top"
@@ -78,22 +83,40 @@ public class WebTabHandler {
             else if (cmd.equals("shutdown")) {
                 interrupt();
                 slave.shutdown();
-                textIO.dispose("Server killed. Forever.");
+                printError("Web server shut down...");
+                textIO.dispose("Web server shut down...");
             } else if (cmd.equals("clear") || cmd.equals("cls")) {
                 term.resetToBookmark("clear");
                 print(">");
             } else if (cmd.equals("cd")) {
                 curDir = Paths.get(System.getProperty("user.home"));
-                printLineCyan(curDir.toString());
+                printLine(curDir.toString(), Color.CYAN);
                 print(">");
             } else if (cmd.startsWith("cd ")) {
                 final String newStr = cmd.substring(3).trim();
                 final Path newPath = curDir.resolve(newStr).normalize().toAbsolutePath();
                 if (newPath.toFile().exists()) {
                     curDir = newPath;
-                    printLineCyan(curDir.toString());
+                    printLine(curDir.toString(), Color.CYAN);
                     print(">");
                 } else printError("cd: no such file or directory: " + newStr);
+            } else if (cmd.equals("env")) {
+                System.getenv().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach((e) ->
+                        printLine(e.getKey() + "=" + (e.getKey().equals("WEB_PASSWORD") ? "••••••••••" : e.getValue())));
+                print(">");
+            } else if (cmd.startsWith("export ")) {
+                final String newStr = cmd.substring(7).trim();
+                if (!newStr.contains("=")) {
+                    printError("Format: export VAR=VALUE");
+                    print(">");
+                } else {
+                    final String[] arr = newStr.split("=");
+                    final String key = arr[0];
+                    final String value = arr[1];
+                    updateEnv(key, value);
+                    printLine("Variable set: " + key + "=" + value, Color.CYAN);
+                    print(">");
+                }
             } else { // usual Bash command
                 task = slave.submit(() -> {
                     try {
@@ -110,12 +133,14 @@ public class WebTabHandler {
     }
 
     private void runBash(String command, Path pwd) throws Exception {
-        // this method is being run asynchronously. DO NOT print to WebTerminal here, print to "buffer" instead
+        // this method is being run asynchronously. DO NOT print to WebTerminal here, print to "buffer" instead.
+
         // process builder setup
         final ProcessBuilder pb = isWindows
             ? new ProcessBuilder("cmd.exe", "/c", command)
             : new ProcessBuilder("bash", "-c", command);
         pb.redirectErrorStream(true);   // redirect error stream to standard output stream for single stream reading
+        pb.environment().putAll(System.getenv()); // update ENV in case when a user adds "export X=Y" commands to active session
         if (pwd != null)
             pb.directory(pwd.toFile()); // set up working directory for "cd" commands
 
@@ -156,6 +181,16 @@ public class WebTabHandler {
         buffer.clear();
     }
 
+    @SuppressWarnings("unchecked")
+    private void updateEnv(String key, String value) {
+        try {
+            final Map<String, String> env = System.getenv();
+            final Field field = env.getClass().getDeclaredField("m");
+            field.setAccessible(true);
+            ((Map<String, String>) field.get(env)).put(key, value);
+        } catch (IllegalAccessException | NoSuchFieldException e) { printError(e.getMessage()); }
+    }
+
     private synchronized void print(String s) {
         if (s == null) return;
         final String t = s.replace(" ", NBSP);
@@ -170,11 +205,11 @@ public class WebTabHandler {
                 p -> p.setPromptColor(Color.WHITE), (term) -> term.println(t));
     }
 
-    private synchronized void printLineCyan(String s) {
+    private synchronized void printLine(String s, Color colour) {
         if (s == null) return;
         final String t = s.replace(" ", NBSP);
         term.executeWithPropertiesConfigurator(p -> {
-            p.setPromptColor(Color.CYAN);
+            p.setPromptColor(colour);
             p.setPromptBold(false);
         }, (term) -> term.println(t));
     }
