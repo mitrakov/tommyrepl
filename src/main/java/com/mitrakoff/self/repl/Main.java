@@ -1,11 +1,15 @@
 package com.mitrakoff.self.repl;
 
 import org.beryx.textio.web.*;
+import sun.misc.Signal;
+import sun.misc.SignalHandler;
 import java.awt.Desktop;
 import java.net.URI;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 
+// mvn package
+// WEB_PASSWORD=1234 nohup java -jar tommyrepl-1.0.0.jar 8080 2>&1 & echo $! > RUNNING_PID
 public class Main {
     public static void main(String[] args) {
         if (args.length == 0) {
@@ -16,6 +20,12 @@ public class Main {
             System.err.println("Provide WEB_PASSWORD env variable");
             System.exit(2);
         }
+
+        // protect web-server from OS kernel signals SIGTTOU and SIGTTIN that some commands send to control TTY (e.g. spark-shell)
+        // w/o this, web-server in background mode (&) may receive those signals and go to "[+] suspended" state forever
+        Signal.handle(new Signal("TTOU"), SignalHandler.SIG_IGN);
+        Signal.handle(new Signal("TTIN"), SignalHandler.SIG_IGN);
+
         final WebTextTerminal term = new WebTextTerminal();
         term.init();
         runWebApp(new SparkTextIoApp((t, d) -> new WebTabHandler(t).run(), term), Integer.parseInt(args[0]));

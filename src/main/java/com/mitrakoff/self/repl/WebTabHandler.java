@@ -10,8 +10,6 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.*;
 
-// mvn package
-// WEB_PASSWORD=1234 java -jar tommyrepl-1.0.0.jar 8080 &
 public class WebTabHandler {
     public static final String NBSP = "\u00A0"; // browsers use non-breaking space (&nbsp;) instead of a usual space
     public static boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -21,9 +19,9 @@ public class WebTabHandler {
     private final ExecutorService slave = Executors.newSingleThreadExecutor();       // bash executor, runs async
     private final LinkedTransferQueue<String> buffer = new LinkedTransferQueue<>();  // stdout/stderr from slave
 
-    private Future<?> task;                            // bash command task (to implement "CTRL+C")
-    private Process process;                           // bash command internal OS process
-    private BufferedWriter bWriter;                    // buffered writer for subcommands like spark-shell, scala, etc.
+    private Future<?> task;           // bash command task (to implement "CTRL+C")
+    private Process process;          // bash command internal OS process
+    private BufferedWriter bWriter;   // writer to be connected to "stdin" of REPLs like spark-shell, scala, psql, etc.
     private Path curDir = Paths.get(System.getProperty("user.home"));    // current working directory, for "cd"
 
     public WebTabHandler(TextIO textIO) {
@@ -41,6 +39,7 @@ public class WebTabHandler {
             interrupt();
             printError("Task cancelled.");
         }, true);
+        updateEnv("TERM", "dumb"); // some REPLs (like old "spark-shell" v3.2.1) may try to control TTY and then hang forever
     }
 
     public void run() {
@@ -53,9 +52,10 @@ public class WebTabHandler {
         } else {
             log("Successful login");
             term.resetToBookmark("clear");
-            printLine("Welcome to Tommy REPL (v1.0.0)", Color.GREEN);
+            printLine("Welcome to Tommy REPL (v1.0.1)", Color.GREEN);
             printLine(" - use CTRL+C to interrupt current command\n - use CTRL+L to clear console", Color.CYAN);
             printLine(" - run \"exit\" to close the session\n - run \"shutdown\" to stop the server", Color.CYAN);
+            printLine(" - note that rich TTY features are disabled (e.g. --password); provide your passwords in ENV", Color.CYAN);
             task = slave.submit(() -> {
                 try {
                     runBash(isWindows ? "date /t && ver && whoami" : "date && uname -a && whoami", curDir);
@@ -75,12 +75,12 @@ public class WebTabHandler {
                     if ((s = buffer.poll()) != null) {
                         if (s.equals("🜐")) printCaret();
                         else if (s.startsWith("Exit code: ")) printError(s);
-                        else printLine(s.replaceAll("\u001B\\[[;\\d]*[ -/]*[@-~]", "")); // rm ESC characters
+                        else printLine(s);
                     }
                 }
             }
             if (cmd.isEmpty()) continue;
-            if (bWriter != null) {      // handle subprocess, e.g. spark-shell, psql, redis-cli, scala, etc.
+            if (bWriter != null) {      // handle subprocess REPL, e.g. spark-shell, psql, redis-cli, scala, etc.
                 bWriter.write(cmd + System.lineSeparator());
                 bWriter.flush();
             }
@@ -122,6 +122,11 @@ public class WebTabHandler {
                     printLine("Variable set: " + key + "=" + value, Color.CYAN);
                     printCaret();
                 }
+            } else if (cmd.startsWith("unset ")) {
+                final String newStr = cmd.substring(6).trim();
+                updateEnv(newStr, null);
+                printLine("Variable unset: " + newStr, Color.CYAN);
+                printCaret();
             } else { // usual Bash command
                 log(cmd);
                 task = slave.submit(() -> {
@@ -160,14 +165,14 @@ public class WebTabHandler {
                 buffer.put(line);
                 term.postUserInput(""); // signal to main UI thread to interrupt textIO.read()
             }
+        } finally {
             bWriter = null;
         }
 
         // wait for the process to complete gracefully
         final boolean finished = process.waitFor(5, TimeUnit.SECONDS);
-        if (!finished) {
+        if (!finished)
             process.destroy(); // force terminate if it times out
-        }
 
         // check the exit code value
         final int exitValue = process.exitValue();
@@ -176,7 +181,7 @@ public class WebTabHandler {
             term.postUserInput("");
         }
 
-        // lifehack: print welcome message ">" into the end of the buffer (due to async nature of the app)
+        // life-hack: print welcome message ">" into the end of the buffer (due to async nature of the app)
         buffer.put("🜐");
         term.postUserInput("");
     }
@@ -200,7 +205,10 @@ public class WebTabHandler {
             final Map<String, String> env = System.getenv();
             final Field field = env.getClass().getDeclaredField("m");
             field.setAccessible(true);
-            ((Map<String, String>) field.get(env)).put(key, value);
+            final Map<String, String> m = (Map<String, String>) field.get(env);
+            if (value != null)
+                m.put(key, value);
+            else m.remove(key);
         } catch (IllegalAccessException | NoSuchFieldException e) { printError(e.getMessage()); }
     }
 
