@@ -193,8 +193,9 @@ public class WebTabHandler {
             task.cancel(true);
         if (bWriter != null) try {
             bWriter.close();
+        } catch (IOException e) { printError(e.getMessage()); } finally {
             bWriter = null;
-        } catch (IOException e) { printError(e.getMessage()); }
+        }
 
         buffer.clear();
     }
@@ -229,9 +230,8 @@ public class WebTabHandler {
     private synchronized void printLine(String s, Color colour) {
         if (s == null) return;
         final String t = s.replace(" ", NBSP);
-        term.executeWithPropertiesConfigurator(p -> {
-            p.setPromptColor(colour);
-        }, (term) -> term.println(t));
+        term.executeWithPropertiesConfigurator(p ->
+                p.setPromptColor(colour), (term) -> term.println(t));
     }
 
     private synchronized void printError(String s) {

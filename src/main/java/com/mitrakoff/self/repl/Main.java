@@ -23,8 +23,10 @@ public class Main {
 
         // protect web-server from OS kernel signals SIGTTOU and SIGTTIN that some commands send to control TTY (e.g. spark-shell)
         // w/o this, web-server in background mode (&) may receive those signals and go to "[+] suspended" state forever
-        Signal.handle(new Signal("TTOU"), SignalHandler.SIG_IGN);
-        Signal.handle(new Signal("TTIN"), SignalHandler.SIG_IGN);
+        if (!WebTabHandler.isWindows) {
+            Signal.handle(new Signal("TTOU"), SignalHandler.SIG_IGN);
+            Signal.handle(new Signal("TTIN"), SignalHandler.SIG_IGN);
+        }
 
         final WebTextTerminal term = new WebTextTerminal();
         term.init();
