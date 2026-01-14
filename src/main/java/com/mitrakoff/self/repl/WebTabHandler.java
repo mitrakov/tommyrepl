@@ -210,7 +210,9 @@ public class WebTabHandler {
             if (value != null)
                 m.put(key, value);
             else m.remove(key);
-        } catch (IllegalAccessException | NoSuchFieldException e) { printError(e.getMessage()); }
+        } catch (Exception e) {
+            printError("Error: cannot modify ENV. Probably your JDK prohibits access via Reflection API");
+        }
     }
 
     private void log(String s) {
