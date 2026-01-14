@@ -211,7 +211,7 @@ public class WebTabHandler {
                 m.put(key, value);
             else m.remove(key);
         } catch (Exception e) {
-            printError("Error: cannot modify ENV. Probably your JDK prohibits access via Reflection API");
+            printError("Error: cannot modify ENV. Probably your JDK prohibits access via Reflection API. " + e);
         }
     }
 
