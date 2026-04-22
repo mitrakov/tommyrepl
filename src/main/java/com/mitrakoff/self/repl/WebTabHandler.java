@@ -4,10 +4,9 @@ import org.beryx.textio.*;
 import org.beryx.textio.web.WebTextTerminal;
 import java.awt.Color;
 import java.io.*;
-import java.lang.reflect.Field;
 import java.nio.file.*;
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class WebTabHandler {
@@ -18,6 +17,8 @@ public class WebTabHandler {
     private final WebTextTerminal term;                                              // ref to terminal instance
     private final ExecutorService slave = Executors.newSingleThreadExecutor();       // bash executor, runs async
     private final LinkedTransferQueue<String> buffer = new LinkedTransferQueue<>();  // stdout/stderr from slave
+    private final Map<String, String> extraEnv = new HashMap<>(System.getenv());     // ENV for a new process
+    private final Set<String> allowedCommands = new HashSet<>();                     // whitelist of bash commands
 
     private Future<?> task;           // bash command task (to implement "CTRL+C")
     private Process process;          // bash command internal OS process
@@ -39,7 +40,7 @@ public class WebTabHandler {
             interrupt();
             printError("Task cancelled.");
         }, true);
-        updateEnv("TERM", "dumb"); // some REPLs (like old "spark-shell" v3.2.1) may try to control TTY and then hang forever
+        extraEnv.put("TERM", "dumb"); // some REPLs (like old "spark-shell" v3.2.1) may try to control TTY and then hang forever
     }
 
     public void run() {
@@ -118,22 +119,25 @@ public class WebTabHandler {
                     final String[] arr = newStr.split("=");
                     final String key = arr[0];
                     final String value = arr[1];
-                    updateEnv(key, value);
+                    extraEnv.put(key, value);
                     printLine("Variable set: " + key + "=" + value, Color.CYAN);
                     printCaret();
                 }
             } else if (cmd.startsWith("unset ")) {
-                final String newStr = cmd.substring(6).trim();
-                updateEnv(newStr, null);
-                printLine("Variable unset: " + newStr, Color.CYAN);
+                final String key = cmd.substring(6).trim();
+                extraEnv.remove(key);
+                printLine("Variable unset: " + key, Color.CYAN);
                 printCaret();
-            } else { // usual Bash command
+            } else if (allowedCommands.contains(cmd) || allowedCommands.isEmpty()) {
                 log(cmd);
                 task = slave.submit(() -> {
                     try {
-                        runBash(cmd, curDir);
+                        runBash(cmd, curDir); // usual Bash command
                     } catch (Exception e) { printError(e.getMessage()); }
                 });
+            } else {
+                log("Command forbidden: " + cmd);
+                printError("Command '" + cmd + "' is forbidden. Allowed commands: " + allowedCommands);
             }
         } catch (Exception e) { printError(e.getMessage()); }
 
@@ -151,7 +155,7 @@ public class WebTabHandler {
             ? new ProcessBuilder("cmd.exe", "/c", command)
             : new ProcessBuilder("bash", "-c", command);
         pb.redirectErrorStream(true);   // redirect error stream to standard output stream for single stream reading
-        pb.environment().putAll(System.getenv()); // update ENV in case when a user adds "export X=Y" commands to active session
+        pb.environment().putAll(extraEnv); // update ENV in case when a user adds "export X=Y" commands to active session
         if (pwd != null)
             pb.directory(pwd.toFile()); // set up working directory for "cd" commands
 
@@ -198,21 +202,6 @@ public class WebTabHandler {
         }
 
         buffer.clear();
-    }
-
-    @SuppressWarnings("unchecked")
-    private void updateEnv(String key, String value) {
-        try {
-            final Map<String, String> env = System.getenv();
-            final Field field = env.getClass().getDeclaredField("m");
-            field.setAccessible(true);
-            final Map<String, String> m = (Map<String, String>) field.get(env);
-            if (value != null)
-                m.put(key, value);
-            else m.remove(key);
-        } catch (Exception e) {
-            printError("Error: cannot modify ENV. Probably your JDK prohibits access via Reflection API. " + e);
-        }
     }
 
     private void log(String s) {
