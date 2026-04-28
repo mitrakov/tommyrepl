@@ -18,8 +18,6 @@ public class WebTabHandler {
     private final ExecutorService slave = Executors.newSingleThreadExecutor();       // bash executor, runs async
     private final LinkedTransferQueue<String> buffer = new LinkedTransferQueue<>();  // stdout/stderr from slave
     private final Map<String, String> extraEnv = new HashMap<>(System.getenv());     // ENV for a new process
-    private final Set<String> forbiddenChars = new HashSet<>(Arrays.asList(";", "&&", "||", "|", "`", "$(", ">", "<"));
-    private final Set<String> allowedCommands = new HashSet<>();                     // whitelist of bash commands
 
     private volatile Future<?> task;           // bash command task (to implement "CTRL+C")
     private volatile Process process;          // bash command internal OS process
@@ -54,7 +52,7 @@ public class WebTabHandler {
         } else {
             log("Successful login");
             term.resetToBookmark("clear");
-            printLine("Welcome to Tommy REPL (v1.0.2)", Color.GREEN);
+            printLine("Welcome to Tommy REPL (v1.0.3)", Color.GREEN);
             printLine(" - use CTRL+C to interrupt current command\n - use CTRL+L to clear console", Color.CYAN);
             printLine(" - run \"exit\" to close the session\n - run \"shutdown\" to stop the server", Color.CYAN);
             printLine(" - note that rich TTY features are disabled (e.g. --password); provide your passwords in ENV", Color.CYAN);
@@ -129,16 +127,13 @@ public class WebTabHandler {
                 extraEnv.remove(key);
                 printLine("Variable unset: " + key, Color.CYAN);
                 printCaret();
-            } else if (securityOk(cmd)) {
+            } else {
                 log(cmd);
                 task = slave.submit(() -> {
                     try {
                         runBash(cmd, curDir); // usual Bash command
                     } catch (Exception e) { printError(e.getMessage()); }
                 });
-            } else {
-                log("Command forbidden: " + cmd);
-                printError("Command '" + cmd + "' is forbidden. Allowed commands: " + allowedCommands);
             }
         } catch (Exception e) { printError(e.getMessage()); }
 
@@ -189,14 +184,6 @@ public class WebTabHandler {
         // life-hack: print welcome message ">" into the end of the buffer (due to async nature of the app)
         buffer.put("🜐");
         term.postUserInput("");
-    }
-
-    private boolean securityOk(String cmd) {
-        if (allowedCommands.isEmpty() || cmd.trim().isEmpty()) return true;
-
-        final String[] tokens = cmd.split("\\s+");
-        if (!allowedCommands.contains(tokens[0])) return false;
-        return Arrays.stream(tokens).noneMatch(token -> forbiddenChars.stream().anyMatch(token::contains));
     }
 
     private void interrupt() {
