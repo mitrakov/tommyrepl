@@ -32,7 +32,7 @@ public class TestHandler {
         }
 
         while (true) try {
-            final String text = textIO.newStringInputReader().withMinLength(0).read().replace(NBSP, System.lineSeparator());
+            final String text = textIO.newStringInputReader().withMinLength(0).read(); // TODO: bug: multi-line text w/o "\n"
             Files.write(Paths.get(String.format("%d.txt", System.currentTimeMillis())), text.getBytes());
             printLine("OK", Color.CYAN);
         } catch (Exception e) { printError(e.getMessage()); }
